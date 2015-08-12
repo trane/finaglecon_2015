@@ -42,6 +42,81 @@ In Functional Programming, we have the best of both worlds: program to an interf
 
 ### Type Classes
 
-At the surface, Type Classes are just interfaces. But, they have one key difference: membership is determined ad-hoc, at usage. This means that you can make an interface for types that you didn't define nor have access to. Watch out for the new fall manatee hiking boot lineup!
+At the surface, Type Classes are just interfaces. But, they have one key difference: membership is determined ad-hoc, at usage. This means that you can make an interface for types that you didn't define nor have access to, e.g. `String`. Watch out for the new fall manatee hiking boot lineup!
 
-Utilizing Type Classes, we can define a set of laws that members of the Type Class must abide by. So long as the user provides proof that they follow those laws, we will accept that type.
+Utilizing Type Classes, we can define a set of laws that members of the Type Class must abide by. So long as the user provides proof that they follow those laws, we will accept that type. This is how we can support data that users of our library might want to store in their session.
+
+#### Rules for Sessions to live by
+
+A session is defined as:
+
+```scala
+type SessionId = String
+
+trait Session[A] {
+  id: SessionId
+  data: A
+}
+```
+
+What we need is some function that can convert the `data` a user of our library wants to store into the type that our backend stores: `A => B`. We also need some way to convert from what was stored into what the user expects: `B => Option[A]`.
+
+Let's define these rules as a `trait`:
+
+```scala
+trait Encoder[A, B] {
+  def apply(s: A): B
+  def unapply(b: B): Option[A]
+}
+```
+
+Finagle already has a data type that is used throughout their various protocol implementations: `Buf`. This type is a nice wrapper for a `Array[Byte]` with many helper methods for types like `String`, `Utf8`, `U32`, etc. So, knowing that we are building on top of Finagle, and we are dealing with `Session[A]`, we can simplify that trait to:
+
+```scala
+trait EncodeSession[A] {
+  def apply(data: A): Buf
+  def unapply(buf: Buf): Option[A]
+}
+```
+
+#### Provide default implementations
+
+We already know that part of Border Patrol's functionality is to save the location that an unauthenticated user tried to access so that we can send them their directly after logging in. So, we need an implementation for the initial `Request`:
+
+```scala
+implicit object EncodedSessionRequest extends EncodeSession[httpx.Request] {
+  def apply(data: httpx.Request): Buf = 
+    Buf.ByteArray.Owned(data.encodeBytes())
+  def unapply(buf: Buf): Option[httpx.Request] = 
+    Try { Request.decodeBytes(Buf.ByteArray.Owned.extract(buf)) }.toOption
+}
+```
+
+#### Code with Type Classes
+
+Now we can define the interface for our store to allow for any type of session data to be stored.
+
+```scala
+trait SessionStore {
+  def put[A : EncodeSession](session: Session[A]): Future[Unit]
+  def get[A : EncodeSession](id: SessionId): Future[Option[Session[A]]]
+}
+```
+
+Implementing this for Memcached is straight forward now
+
+```scala
+case class MemcachedSessionStore(store: memcachedx.BaseClient[Buf]) extends SessionStore {
+  def put[A : EncodeSession](session: Session[A]): Future[Unit] =
+  	 store.set(session.id, 0, 60, implicitly[EncodeSession](session.data))
+  	 
+  def get[A : EncodeSession](id: SessionId): Future[Option[Session[A]]]
+     store.get(id).map(_.flatMap(buf => Session(id, implicitly[EncodeSession].unapply(buf)))
+}
+```
+
+#### What just happened?
+
+Well, we just allowed for more general types to be defined by users of our library and described a set of rules (`A => B` and `B => Option[A]`) that those types must follow. Then we provided a default implementation that users can import into their code and get for free!
+
+## Encode our logic in types
