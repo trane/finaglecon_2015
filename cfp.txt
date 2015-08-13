@@ -1,0 +1,43 @@
+sessions + authentication
+authentication: multiple types
+SOA, single sign on
+generic
+
+finagle-http, finagle-oath2, finagle-redis/memcached
+
+Micro services:
+ - 
+ Pros:
+  - Optimize for understandability of individual components.
+  - Stronger guarantees by reduced complexity
+  - reduced code complexity
+  - improved speed: testing, feature development
+  - segment areas of the system for specific 
+ Cons:
+  - The inter-communication between these services is complected
+  - Like functional programming, we like small
+While micro service architectures are becoming more popular for reducing the cognetive and operational overhead required to run and maintain larger 
+While service oriented architectures can significantly reduce the complexity
+
+A micro services architecture encourages building small, understandable components in the hope to make testing and development of new features faster and simpler.
+This simplification at the service layer pushes the complexity cost to components in the service orchestration layer like authentication, routing, and sessions.
+In this talk, Andrew Kuhnhausen will highlight a functional, type-safe, and generic programming approach to authentication and sessions for micro services built on top of Finagle and Finch; focus will be on the modularity and extensibility gained by composing Finagle’s primitives with Scala’s type classes, while going through the design of a generic library.
+
+
+audience:
+The audience is anyone interested in functional design, generic programming, and abstracting over Finagle. Attendees will learn an approach of building on top of the solid functional primitives given by Finagle and designing for extensibility via type-classes and implicits.
+
+Biography
+Andrew Kuhnhausen is a staff engineer at Lookout in San Francisco where he formed their functional programming and Scala study groups. He did his thesis on static analysis of Dalvik byte code for malware detection. When not futzing around with functional programming or distributed computing, you can find him riding his bike and enjoying the fine eateries around the Bay Area.
+
+Benefits
+This talk will highlight the excellent design of libraries like Finch and Finagle, by showing how to build abstractions over different layers of the stack. Finagle provides solid, functional primitives on top of Netty but is painful to use when building out more complex HTTP services. Finch bridges that gap by providing an excellent, functional abstraction over finagle-httpx, but necessarily falls short of providing basic things like generic browser sessions. My talk will highlight a project that I’ve worked on that provides nice generic primitives for things like sessions and authentication. My hope is to get attendees thinking about how they can contribute to the community with more generic and pluggable abstractions that fill other gaps in the ecosystem.
+
+, which further complects the lives of mobile and webpage developers.
+Supporting multiple client facing backends for desktop and mobile can blow up exponentially
+
+A functional, generic programming approach to composing authentication and session management for a micro services architecture.
+
+Defines a set of types that you can plugin finagle supported protocols to ensure a type-safe and 
+
+
