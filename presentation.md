@@ -10,34 +10,38 @@
 
 ---
 
-## Back Story
+## back story
 
 ---
 
-## Primitives
+## primitives
 
 ![100%, left](finagle_logo_small.png)
 ![100%, right](finch-logo.png)
 
----
-
-## Building Abstractions
+^ We heard from Marius about abstracting Finagle primitives, and for those that attended the Finch workshop you saw how Vladymir and Travis took the lower level primitives from finagle-httpx and lifted them into higher-order functional structures to define a dsl for http api
 
 ---
 
-# About Me
+## abstractions
+
+^ i'm going to talk about finding some reasonable abstractions for few web components that we developed for our border of the network session composition and authentication application
 
 ---
+
+# /me
 
 ## work
 
 * Engineer at ![](lookout.png)
-* Created Functional Programming study groups (currently working through Functional Programming in Scala)
+* Started Functional Programming study groups
 * Diversity Committee (let's talk)
-* Moving to work on Functional infrastructure
+* Moving teams to work on Functional infrastructure
 * We are hiring - come ride the Curry-Howard correspondence with us
 
 ---
+
+# /me
 
 ## academia
 
@@ -46,14 +50,14 @@
 
 ---
 
+# /me
+
 ## why you should (not) listen
 
 * This is my first conference talk
 * I'm not an expert in Scala nor typed FP
 * Lessons from building an idiomatic Scala open-source FP library
-* Some of this won't work in Java* 
-
-*better compiler required
+* Library is not Java friendly
 
 ---
 
@@ -118,34 +122,18 @@
 
 ---
 
-# context achieved!
+# context level++
 ![](win.jpg)
 
-^ ok, cool... let's talk about stuff
+#### github.com/lookout/ngx_borderpatrol
+
+^ our first version of this orchestration service written in nginx+lua, and it's available as an open source project, too. this talk is about building a more reusable library for the open source community that we could use ourselves to build our edge-of-the-network orchestrator
 
 ---
 
-# Functional Approach
+# Library Design
 
-^ let's talk about a way we can model Sessions
-
----
-
-## sessions
-
-```scala
-trait SessionId {
-  val expiry: Time
-  val entropy: Seq[Byte]
-  val secret: Secret
-  val signature: Seq[Byte]
-}
-
-trait Session[A] {
-  val id: SessionId
-  val data: A
-}
-```
+^ i wanted to talk a bit about making flexibile apis for the users of your library, and how functional programming gives you a really reusable approach
 
 ---
 
@@ -164,11 +152,15 @@ case object Cat extends Mammal
 
 ## inheritance for end users
 
-### define a general type and silently accept more specific types (subtypes)
+### define a *general* type and silently accept more *specific* types (subtypes)
+
+^ this is a very inflexible model that puts the onus on the library writter to encapsulate all potential uses.
 
 ----
 
 ### shoe store
+
+![fit](catshoes.jpg)
 
 ```scala
 trait ShoeStore {
@@ -185,21 +177,22 @@ case object Bird extends Animal
 case object Lizard extends Reptile
 case object Velociraptor extends Bird with Lizard
 
-ShoeStore.get(pureApplesauce) // compile error :(
+:(
 ```
+![inline](veloci.jpg)
 
 ---
 
 ## interfaces
 
-### define a specific description and siltently allow more general types
+### define a *specific* description and silently allow more *general* types
 
 ---
 
 ## icanhazshoes?
 
-* Anything with feet can (probably) wear shoes
-* Support `Reptile`, `Bird`, `Mamamal`, `ImperialMetrics`
+* Anything with `Feet` can (probably) wear shoes
+* Support `Reptile`, `Bird`, `Mamamal`, but not `ImperialMetrics`
 
 ---
 
@@ -209,13 +202,15 @@ ShoeStore.get(pureApplesauce) // compile error :(
 
 ### adapter pattern
 
-interface membership is determined at definition
+interface membership is determined at *definition*
+
+^ so it's cumbersome as a library user, and doesn't work on types you don't define, e.g. String
 
 ---
 
 ## monkey patching
 
-^ in ruby, we could just monkey patch
+^ in ruby, we could just monkey patch - which gives us the more ad-hoc at-use membership that interfaces don't give us. unfortunately, only mean people use monkey patching.
 
 ---
 
@@ -225,20 +220,47 @@ interface membership is determined at definition
 
 ---
 
-# Sessions
+# Abstracting
+
+^ let's talk about a way we can model Sessions and utilize type classes to enable arbitrary data to be stored
+
+---
+
+## web sessions
+
+![left](cookie.jpg)
 
 ```scala
 trait Session[A] {
   val id: SessionId
   val data: A
 }
+
+trait SessionId {
+  val expiry: Time
+  val entropy: Seq[Byte]
+  val secret: Secret
+  val signature: Seq[Byte]
+}
 ```
+^ a session is a simple container, a unique cryptographically signed id that is given as the value to a cookie, and some data the library user wants to store along with this session. 
 
 ---
 
 ## interface
 
-^ What we need is some function that can convert the `data` a user of our library wants to store into the type that our backend stores: `A => B`. We also need some way to convert from what was stored into what the user expects: `B => Option[A]`.
+```scala
+type K
+type Get[B]: K => Store => Option[B], 
+type Put[B]: K => B => Store => Unit
+```
+^ a simple definition of a store would be to take some key and some value and a store
+
+---
+
+## A !=? B
+
+^ but, the problem is fitting the data in a session into that store
 
 ---
 
@@ -247,14 +269,16 @@ trait Session[A] {
 * `A => B`
 * `B => Option[A]`
 
+^ What we need is some function that can convert the `data` a user of our library wants to store into the type that our backend stores: `A => B`. We also need some way to convert from what was stored into what the user expects: `B => Option[A]`.
+
 ---
 
 ### define the general law
 
 ```scala
 trait Encoder[A, B] {
-  def apply(a: A): B
-  def unapply(b: B): Option[A]
+  def encode(a: A): B
+  def decode(b: B): Option[A]
 }
 ```
 
@@ -274,8 +298,8 @@ type EncodeSession[A] = Encoder[A, Buf]
 // or
 
 trait EncodeSession[A] {
-  def apply(data: A): Buf
-  def unapply(buf: Buf): Option[A]
+  def encode(data: A): Buf
+  def decode(buf: Buf): Option[A]
 }
 
 ```
@@ -286,8 +310,9 @@ trait EncodeSession[A] {
 
 ## defaults
 
+![right,fit](borderpatrol.png)
 
-^ We already know that part of Border Patrol's functionality is to save the location that an unauthenticated user tried to access so that we can send them their directly after logging in. So, we need an implementation for the initial `Request`
+^ One of the main use cases is to save the location that an unauthenticated user tried to access so that we can send them their directly after logging in. So, we need an implementation for the initial `Request`
 
 ---
 
@@ -297,10 +322,10 @@ trait EncodeSession[A] {
 implicit object EncodedSessionRequest 
     extends EncodeSession[httpx.Request] {
   
-  def apply(data: httpx.Request): Buf = 
+  def encode(data: httpx.Request): Buf = 
     Buf.ByteArray.Owned(data.encodeBytes())
   
-  def unapply(buf: Buf): Option[httpx.Request] = 
+  def decode(buf: Buf): Option[httpx.Request] = 
     Try { Request.decodeBytes(Buf.ByteArray.Owned.extract(buf)) }.toOption
 }
 ```
@@ -349,12 +374,19 @@ case class MemcachedSessionStore(store: memcachedx.BaseClient[Buf])
 
 ## more advanced fun-time
 
-### `Session[A] + Functor[F[_]] + Free Monad
+### Session[A] + Functor[F[_]] + Free Monad
+#### :) yesplz! (:
 
 ^ `Session[A]` can be lifted into a `Functor[Session[_]]`
 Once we have a functor, we can define an interpreter for our database operations using the Free Monad
 Now `get` and `put` become actual types of `Get` and `Put` and we can know even more about the behavior at compile-time
 Feel free to implement this for fun, we are accepting pull requests
+
+---
+
+## auth as a type class
+
+^ we also have auth type classes to - hopefully - be able to plug in different authentication mechanisms for our endpoints
 
 ---
 
@@ -384,17 +416,15 @@ type Filter[ReqIn, RepOut, ReqOut, RepIn] =
 
 ## Finch
 
-### Router
+### Router / RequestReader / ResponseBuilder
 ```scala
 type Router[A] = Request => Option[A]
 ```
 
-### RequestReader
 ```scala
 type RequestReader[A] = Request => Future[A]
 ```
 
-### ResponseBuilder
 ```scala
 type ResponseBuilder[A] = (A, EncodeResponse[A]) => Response
 ```
@@ -402,9 +432,9 @@ type ResponseBuilder[A] = (A, EncodeResponse[A]) => Response
 
 ---
 
-# Lessons in Composability
+# Composability
 
-^ Finch takes an idiomatic scala approach to a functional library, this is where I learned a lot about defining types in a general and composable way.
+^ Finch takes an scala idiomatic approach to a functional library, this is where I learned a lot about defining types in a general and composable way.
 
 ---
 
@@ -414,7 +444,7 @@ type ResponseBuilder[A] = (A, EncodeResponse[A]) => Response
 type Router[A] = Request => Option[A]
 ```
 
-^ in a low-level, routers can be treated as a simple function from a Request to an Option of some generic type
+^ in a low-level, routers can be treated as a simple function from a Request to an Option of some generic type. this means we get to have meaningful types instead of having to go all the way to an http Request.
 
 ---
 
@@ -429,10 +459,12 @@ get("users" / int("userId") / "tickets" / int("ticketId"))
 
 ## Using these primitives
 
+^ in bp, we have the notion of which service a user wants to talk to baked in to the path
+
 ---
 
 ### Router for Path based Service
-`http://example.com/:service/`
+`http://example.com/:service/...`
 
 ---
 
@@ -443,18 +475,22 @@ get("users" / int("userId") / "tickets" / int("ticketId"))
 
 ## Path based Service
 
+#### lookout.com/:service/ => :service
+
 ```scala
-val services = Set("enterprise", "consumer")
+implicit val pathMap = Map(("ent" -> "enterprise"), ("my" -> "consumer"))
 
-def validate(s: String, services: Set[String]): String = 
-  (services & Set(s)).head
+def validatePath(path: String)(implicit services: Map[String, String]): Option[String] = 
+  services.get(path)
 
-object servicePath extends Extractor("service", s => validate(s, services))
+object servicePath extends Extractor("service", validate(_))
 ```
 
 ---
 
-## Subdomain based
+## Default subdomain based
+
+#### <sub>.lookout.com/ => sub
 
 ```scala
 case class DefaultServiceDomain(g: String => Option[String])
@@ -469,7 +505,8 @@ case class DefaultServiceDomain(g: String => Option[String])
     } yield (input.drop(1), () => Future.value(s))
 }
 
-val subdomain = DefaultServiceDomain(s => validate(s, services))
+val domainMap = Map(("www" -> "consumer"), ("enterprise" -> "enterprise"))
+val subdomain = DefaultServiceDomain(domainMap.get(_))
 ```
 
 ---
@@ -477,8 +514,23 @@ val subdomain = DefaultServiceDomain(s => validate(s, services))
 ## Compose them
 
 ```scala
-val service = servicePath | subdomain
+val serviceRouter = servicePath | subdomain
 ```
+
+```
+  if (:service in path) then:
+    mapping(:service)
+  if (:service in subdomain) then:
+    default(:service)
+  else
+    halt with 400
+  end
+```
+^ we've effectively encoded the sequential conditional logic into values and pushed the condition implementation down into composable boxes!
+
+---
+
+## w00t! w00t!
 
 ---
 
@@ -486,14 +538,39 @@ val service = servicePath | subdomain
 
 ```scala
 val endpoints = (
-  (Get / service /> AuthenticatedEndpoint) :+:
+  (Get / serviceRouter /> AuthenticatedEndpoint) :+:
   (Post / "login" /> LoginService))
 )
 
 val server = Httpx.serve("localhost:8080", endpoints.toService)
 ```
 
+^ using coproduct routers, we can define both authenticated and unauthenticated endpoints
+
 ---
 
-# Contributing to the community
+# Things bp does
+* Sessions
+* Authentication (Basic, internal)
+* Encryption for data at rest
+
+---
+
+# Things bp is about to do
+* CSRF via double submit cookie
+* Periodic secret key generation
+
+---
+
+# Things you can help with
+* github.com/lookout/borderpatrol/issues
+* Build your own abstractions on Finagle/Finch
+
+---
+
+# Thank you
+
+### @kuhnhausen | github.com/trane | blog.errstr.com
+
+---
 
